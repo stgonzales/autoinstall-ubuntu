@@ -1,3 +1,5 @@
+#cloud-config
+
 autoinstall:
     version: 1
     interactive-sections:
@@ -19,9 +21,6 @@ autoinstall:
       channel: latest/edge
     keyboard:
       layout: us
-    source:
-      search_drivers: true
-      id: ubuntu-desktop
     apt:
       mirror-selection:
         primary:
