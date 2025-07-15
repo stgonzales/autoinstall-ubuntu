@@ -2,46 +2,67 @@
 
 autoinstall:
     version: 1
-    interactive-sections:
-      - network
-    storage:
-      config:
-        - type: disk
-          id: os-disk
-          match:
-            - path: /dev/nvme0n1
     identity:
         realname: "Stephen Goncalves"
         hostname: ubuntu
         username: stgonzales
         password: "$6$MuMpQOK1qi1GyG.s$ZkZ3bCXYOy87sxXy0qvhv0yc.RtyiMHcgQI6SaXPeimyrcxeF7FnaufbGuRMTLOlBkmg3E4M7oUCk7aXwFgMr0"
+    
+    interactive-sections:
+      - network
+
+    storage:
+      layout:
+        name: lvm
+        sizing-policy: all
+        match:
+          path: /dev/nvme0n1
+    keyboard:
+      layout: us
+      variant: ""
     locale: en_GB
+    timezone: "Europe/London"
     refresh-installer:
       update: true
       channel: latest/edge
-    keyboard:
-      layout: us
+    source:
+      id: ubuntu-desktop
     apt:
+      preserve_sources_list: false
       mirror-selection:
         primary:
+          - country-mirror
           - uri: "http://archive.ubuntu.com/ubuntu"
-        fallback: offline-install
-        geoip: true
+            arches: [i386, amd64]
+          - uri: "http://ports.ubuntu.com/ubuntu-ports"
+            arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]
+      fallback: abort
+      geoip: true
+    ubuntu-pro:
+      token: C12BRYHjXhCHzSpsqmnXQsVfdEojtg
+    ssh:
+      install-server: false
+      authorized-keys: []
+      allow-pw: true
+    codecs:
+      install: true
+    drivers:
+      install: true
     packages:
+      - curl
       - git
       - polybar
       - flatpak
       - gnome-software-plugin-flatpak
       - zsh
-    timezone: "Europe/London"
     snaps:
       - name: discord
       - name: spotify
       - name: vscode
       - name: docker
       - name: ghostty
-    ubuntu-pro:
-      token: C12BRYHjXhCHzSpsqmnXQsVfdEojtg
+    updates: all
+    shutdown: reboot
     late-commands:
       # i3
       - curtin in-target -- /usr/lib/apt/apt-helper download-file https://debian.sur5r.net/i3/pool/main/s/sur5r-keyring/sur5r-keyring_2025.03.09_all.deb keyring.deb SHA256:2c2601e6053d5c68c2c60bcd088fa9797acec5f285151d46de9c830aaba6173c
@@ -58,3 +79,8 @@ autoinstall:
       # spaceship
       - curtin in-target -- git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
       - curtin in-target -- ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
+    error-commands:
+      - tar -czf /installer-logs.tar.gz /var/log/installer
+      - journalctl -b > /installer-journal.log
+    kernel-crash-dumps:
+      enabled: false
