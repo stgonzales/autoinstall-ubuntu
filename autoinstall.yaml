@@ -1,0 +1,61 @@
+autoinstall:
+    version: 1
+    interactive-sections:
+      - network
+    storage:
+      config:
+        - type: disk
+          id: os-disk
+          match:
+            - path: /dev/nvme0n1
+    identity:
+        realname: "Stephen Goncalves"
+        hostname: ubuntu
+        username: stgonzales
+        password: "$6$MuMpQOK1qi1GyG.s$ZkZ3bCXYOy87sxXy0qvhv0yc.RtyiMHcgQI6SaXPeimyrcxeF7FnaufbGuRMTLOlBkmg3E4M7oUCk7aXwFgMr0"
+    locale: en_GB
+    refresh-installer:
+      update: true
+      channel: latest/edge
+    keyboard:
+      layout: us
+    source:
+      search_drivers: true
+      id: ubuntu-desktop
+    apt:
+      mirror-selection:
+        primary:
+          - uri: "http://archive.ubuntu.com/ubuntu"
+        fallback: offline-install
+        geoip: true
+    packages:
+      - git
+      - polybar
+      - flatpak
+      - gnome-software-plugin-flatpak
+      - zsh
+    timezone: "Europe/London"
+    snaps:
+      - name: discord
+      - name: spotify
+      - name: vscode
+      - name: docker
+      - name: ghostty
+    ubuntu-pro:
+      token: C12BRYHjXhCHzSpsqmnXQsVfdEojtg
+    late-commands:
+      # i3
+      - curtin in-target -- /usr/lib/apt/apt-helper download-file https://debian.sur5r.net/i3/pool/main/s/sur5r-keyring/sur5r-keyring_2025.03.09_all.deb keyring.deb SHA256:2c2601e6053d5c68c2c60bcd088fa9797acec5f285151d46de9c830aaba6173c
+      - curtin in-target -- apt install ./keyring.deb
+      - curtin in-target -- echo "deb [signed-by=/usr/share/keyrings/sur5r-keyring.gpg] http://debian.sur5r.net/i3/ $(grep '^VERSION_CODENAME=' /etc/os-release | cut -f2 -d=) universe" | sudo tee /etc/apt/sources.list.d/sur5r-i3.list
+      # flatpak
+      - curtin in-target -- flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+      # zen browser
+      - curtin in-target -- flatpak install flathub app.zen_browser.zen
+      # Zsh default shell
+      - curtin in-target -- chsh -s $(which zsh)
+      # Oh My Zsh
+      - curtin in-target -- sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
+      # spaceship
+      - curtin in-target -- git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
+      - curtin in-target -- ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
