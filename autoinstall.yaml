@@ -10,13 +10,13 @@ autoinstall:
     
     interactive-sections:
       - network
-
-    storage:
-      layout:
-        name: lvm
-        sizing-policy: all
-        match:
-          path: /dev/nvme0n1
+      - storage
+    # storage:
+    #   layout:
+    #     name: lvm
+    #     sizing-policy: all
+    #     match:
+    #       path: /dev/nvme0n1
     keyboard:
       layout: us
       variant: ""
