@@ -55,6 +55,8 @@ autoinstall:
       - flatpak
       - gnome-software-plugin-flatpak
       - zsh
+      - i3
+      - feh
     snaps:
       - name: discord
       - name: spotify
@@ -64,23 +66,168 @@ autoinstall:
     updates: all
     shutdown: reboot
     late-commands:
-      # i3
-      - curtin in-target -- /usr/lib/apt/apt-helper download-file https://debian.sur5r.net/i3/pool/main/s/sur5r-keyring/sur5r-keyring_2025.03.09_all.deb keyring.deb SHA256:2c2601e6053d5c68c2c60bcd088fa9797acec5f285151d46de9c830aaba6173c
-      - curtin in-target -- apt install ./keyring.deb
-      - curtin in-target -- echo "deb [signed-by=/usr/share/keyrings/sur5r-keyring.gpg] http://debian.sur5r.net/i3/ $(grep '^VERSION_CODENAME=' /etc/os-release | cut -f2 -d=) universe" | sudo tee /etc/apt/sources.list.d/sur5r-i3.list
-      # flatpak
+      # Update package lists first
+      - curtin in-target -- apt update
+      
+      # Install i3 from official repo instead of third-party
+      # (i3 is already added to packages above)
+      
+      # Setup flatpak
       - curtin in-target -- flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-      # zen browser
-      - curtin in-target -- flatpak install flathub app.zen_browser.zen
-      # Zsh default shell
-      - curtin in-target -- chsh -s $(which zsh)
-      # Oh My Zsh
-      - curtin in-target -- sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
-      # spaceship
-      - curtin in-target -- git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$ZSH_CUSTOM/themes/spaceship-prompt" --depth=1
-      - curtin in-target -- ln -s "$ZSH_CUSTOM/themes/spaceship-prompt/spaceship.zsh-theme" "$ZSH_CUSTOM/themes/spaceship.zsh-theme"
-      # Github CLI
-      - curtin in-target -- (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) && sudo mkdir -p -m 755 /etc/apt/keyrings && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && sudo mkdir -p -m 755 /etc/apt/sources.list.d && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt update && sudo apt install gh -y
+      
+      # Install Zen browser via flatpak (system-wide)
+      - curtin in-target -- flatpak install -y --system flathub io.github.zen_browser.zen
+      
+      # Install GitHub CLI
+      - curtin in-target -- wget -qO- https://cli.github.com/packages/githubcli-archive-keyring.gpg | gpg --dearmor -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+      - curtin in-target -- echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+      - curtin in-target -- apt update
+      - curtin in-target -- apt install -y gh
+      
+      # Install Yarn
+      - curtin in-target -- wget -qO- https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor -o /usr/share/keyrings/yarnpkg.gpg
+      - curtin in-target -- echo "deb [arch=all signed-by=/usr/share/keyrings/yarnpkg.gpg] https://dl.yarnpkg.com/debian/ stable main" > /etc/apt/sources.list.d/yarn.list
+      - curtin in-target -- apt update
+      - curtin in-target -- apt install -y --no-install-recommends yarn
+      
+      # Change default shell for the user (not root)
+      - curtin in-target -- chsh -s /usr/bin/zsh stgonzales
+      
+      # Create a setup script for user-specific configurations
+      - curtin in-target -- mkdir -p /home/stgonzales/setup
+      - |
+        curtin in-target -- tee /home/stgonzales/setup/user-setup.sh << 'EOF'
+        #!/bin/bash
+        # This script runs automatically on first login to set up user environment
+        
+        # Function to log messages
+        log_message() {
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$HOME/setup.log"
+        }
+        
+        # Function to handle errors
+        handle_error() {
+            log_message "ERROR: Setup failed at: $1"
+            log_message "Please check the setup.log file and run the setup manually if needed"
+            exit 1
+        }
+        
+        # Set up error handling
+        set -e
+        trap 'handle_error "line $LINENO"' ERR
+        
+        log_message "Starting automated user setup..."
+        
+        # Install Oh My Zsh non-interactively
+        log_message "Installing Oh My Zsh..."
+        export RUNZSH=no
+        export CHSH=no
+        sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+        
+        # Install Spaceship prompt
+        log_message "Installing Spaceship prompt..."
+        git clone https://github.com/spaceship-prompt/spaceship-prompt.git "$HOME/.oh-my-zsh/custom/themes/spaceship-prompt" --depth=1
+        ln -s "$HOME/.oh-my-zsh/custom/themes/spaceship-prompt/spaceship.zsh-theme" "$HOME/.oh-my-zsh/custom/themes/spaceship.zsh-theme"
+        
+        # Set Spaceship as the theme
+        sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="spaceship"/' "$HOME/.zshrc"
+        
+        # Install nvm
+        log_message "Installing nvm..."
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+        
+        # Source nvm to use it in this script
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+        
+        # Install Node latest
+        log_message "Installing Node.js..."
+        nvm install node
+        nvm use node
+        
+        # Install pnpm
+        log_message "Installing pnpm..."
+        curl -fsSL https://get.pnpm.io/install.sh | sh -
+        
+        # Install Bun
+        log_message "Installing Bun..."
+        curl -fsSL https://bun.com/install | bash
+        
+        # Install Deno (user-local installation)
+        log_message "Installing Deno..."
+        curl -fsSL https://deno.land/install.sh | sh
+        
+        # Add tool paths and setup completion flag to .zshrc
+        log_message "Configuring shell environment..."
+        echo '' >> "$HOME/.zshrc"
+        echo '# User-installed tools' >> "$HOME/.zshrc"
+        echo 'export PATH="$HOME/.bun/bin:$PATH"' >> "$HOME/.zshrc"
+        echo 'export PATH="$HOME/.deno/bin:$PATH"' >> "$HOME/.zshrc"
+        echo 'export PNPM_HOME="$HOME/.local/share/pnpm"' >> "$HOME/.zshrc"
+        echo 'export PATH="$PNPM_HOME:$PATH"' >> "$HOME/.zshrc"
+        echo '' >> "$HOME/.zshrc"
+        echo '# Setup completion flag' >> "$HOME/.zshrc"
+        echo 'export SETUP_COMPLETED=true' >> "$HOME/.zshrc"
+        
+        # Also set the flag in .bashrc in case user switches back to bash
+        echo '' >> "$HOME/.bashrc"
+        echo '# Setup completion flag' >> "$HOME/.bashrc"
+        echo 'export SETUP_COMPLETED=true' >> "$HOME/.bashrc"
+        
+        # Create a permanent flag file
+        echo "true" > "$HOME/.setup_completed"
+        
+        log_message "User setup completed successfully!"
+        log_message "Please restart your terminal or run: source ~/.zshrc"
+        
+        # Show completion message
+        echo ""
+        echo "=========================================="
+        echo "    USER SETUP COMPLETED SUCCESSFULLY"
+        echo "=========================================="
+        echo "Your development environment is now ready!"
+        echo "Please restart your terminal to use the new shell configuration."
+        echo ""
+        EOF
+      
+      # Make the setup script executable and owned by the user
+      - curtin in-target -- chmod +x /home/stgonzales/setup/user-setup.sh
+      - curtin in-target -- chown -R stgonzales:stgonzales /home/stgonzales/setup
+      
+      # Add automatic setup execution to .zshrc
+      - |
+        curtin in-target -- tee -a /home/stgonzales/.zshrc << 'EOF'
+        
+        # Auto-run user setup on first login
+        if [[ -z "$SETUP_COMPLETED" && ! -f "$HOME/.setup_completed" ]]; then
+            echo "Running first-time user setup..."
+            if [[ -x "$HOME/setup/user-setup.sh" ]]; then
+                "$HOME/setup/user-setup.sh"
+            else
+                echo "Warning: Setup script not found or not executable"
+            fi
+        fi
+        EOF
+      
+      # Add automatic setup execution to .bashrc as well (fallback)
+      - |
+        curtin in-target -- tee -a /home/stgonzales/.bashrc << 'EOF'
+        
+        # Auto-run user setup on first login
+        if [[ -z "$SETUP_COMPLETED" && ! -f "$HOME/.setup_completed" ]]; then
+            echo "Running first-time user setup..."
+            if [[ -x "$HOME/setup/user-setup.sh" ]]; then
+                "$HOME/setup/user-setup.sh"
+            else
+                echo "Warning: Setup script not found or not executable"
+            fi
+        fi
+        EOF
+      
+      # Ensure proper ownership of shell configuration files
+      - curtin in-target -- chown stgonzales:stgonzales /home/stgonzales/.zshrc
+      - curtin in-target -- chown stgonzales:stgonzales /home/stgonzales/.bashrc
+      
     error-commands:
       - tar -czf /installer-logs.tar.gz /var/log/installer
       - journalctl -b > /installer-journal.log
